@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Responsive Gesture Snake Geme </title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
+    <style>
+        :root {
+            --bg-main: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.6);
+            --border-card: rgba(255, 255, 255, 0.1);
+            --accent-snake: #38bdf8;
+            --accent-food: #f43f5e;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start; /* Better for mobile scrolling */
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 15px;
+            box-sizing: border-box;
+            background-image: radial-gradient(circle at top right, #1e293b 0%, transparent 60%);
+            overflow-x: hidden;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 5vw, 2.5rem); /* Responsive typography */
+            margin: 0 0 8px 0;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: clamp(0.9rem, 3vw, 1rem);
+            margin: 0;
+        }
+
+        /* Responsive Layout Container */
+        .layout {
+            display: flex;
+            gap: 24px;
+            width: 100%;
+            max-width: 1000px;
+            /* Stack vertically by default (Mobile First) */
+            flex-direction: column; 
+            align-items: center;
+        }
+
+        /* Desktop Layout Override */
+        @media (min-width: 768px) {
+            .layout {
+                flex-direction: row;
+                align-items: flex-start;
+                justify-content: center;
+            }
+            body {
+                justify-content: center;
+            }
+        }
+
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-card);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 440px; /* Constrain max width for desktop */
+            box-sizing: border-box;
+        }
+
+        .game-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 16px;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .score-pill {
+            background: rgba(0,0,0,0.3);
+            padding: 8px 16px;
+            border-radius: 30px;
+            border: 1px solid var(--border-card);
+        }
+
+        /* Responsive Canvas */
+        #gameCanvas {
+            background-color: #020617;
+            border-radius: 12px;
+            border: 1px solid var(--border-card);
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.5);
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1; /* Keeps it perfectly square */
+            max-width: 400px;
+            touch-action: none; /* Prevents mobile scrolling when touching the canvas */
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            width: 100%;
+            max-width: 440px;
+        }
+
+        @media (min-width: 768px) {
+            .sidebar {
+                max-width: 320px; /* Narrower sidebar on desktop */
+            }
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            aspect-ratio: 4/3;
+        }
+
+        #videoElement {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror camera */
+        }
+
+        #loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--accent-snake);
+            font-weight: 600;
+            z-index: 10;
+        }
+
+        .status-badge {
+            background: rgba(0, 0, 0, 0.4);
+            color: var(--text-main);
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 1.1rem;
+            border: 1px solid var(--border-card);
+            transition: all 0.3s ease;
+        }
+
+        .instructions {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-top: 8px;
+        }
+
+        .instructions ul {
+            padding-left: 20px;
+            margin-top: 8px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Gesture Snake</h1>
+        <p class="subtitle">Code With ❤️</p>
+    </div>
+
+    <div class="layout">
+        <div class="card game-section">
+            <div class="stats-bar">
+                <div class="score-pill">Score: <span id="scoreDisplay" style="color: var(--accent-snake);">0</span></div>
+                <div class="score-pill">Best: <span id="highScoreDisplay" style="color: #fbbf24;">0</span></div>
+            </div>
+            <canvas id="gameCanvas" width="400" height="400"></canvas>
+        </div>
+        
+        <div class="sidebar">
+            <div class="card" style="padding: 16px;">
+                <div class="camera-container">
+                    <div id="loading">Starting Camera...</div>
+                    <video id="videoElement" autoplay playsinline></video>
+                </div>
+            </div>
+
+            <div class="card">
+                <div id="gesture-readout" class="status-badge">Waiting for hand...</div>
+                <div class="instructions">
+                    <ul>
+                        <li><b>Point</b> index finger to steer.</li>
+                        <li><b>Relax</b> hand to keep moving.</li>
+                        <li><b>Hide</b> hand from camera to PAUSE.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- SNAKE GAME LOGIC ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+        const gestureReadout = document.getElementById('gesture-readout');
+        
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize;
+        const gameSpeed = 200; 
+
+        let snake = [{ x: 10, y: 10 }];
+        let oldSnake = [{ x: 10, y: 10 }]; 
+        let food = { x: 15, y: 15 };
+        let score = 0;
+        
+        let highScore = localStorage.getItem('proSnakeHighScore') || 0;
+        highScoreDisplay.innerText = highScore;
+
+        let dx = 0; let dy = 0; 
+        let nextDx = 0; let nextDy = 0;
+        let lastDx = 0; let lastDy = -1; 
+        let lastLogicTime = Date.now();
+
+        function resetGame() {
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('proSnakeHighScore', highScore);
+                highScoreDisplay.innerText = highScore;
+            }
+            snake = [{ x: 10, y: 10 }];
+            oldSnake = [{ x: 10, y: 10 }];
+            dx = 0; dy = 0;
+            nextDx = 0; nextDy = 0;
+            lastDx = 0; lastDy = -1;
+            score = 0;
+            scoreDisplay.innerText = score;
+            placeFood();
+        }
+
+        function placeFood() {
+            food = {
+                x: Math.floor(Math.random() * tileCount),
+                y: Math.floor(Math.random() * tileCount)
+            };
+            for (let segment of snake) {
+                if (segment.x === food.x && segment.y === food.y) placeFood();
+            }
+        }
+
+        function updateLogic() {
+            dx = nextDx;
+            dy = nextDy;
+
+            if (dx !== 0 || dy !== 0) {
+                lastDx = dx;
+                lastDy = dy;
+                
+                oldSnake = snake.map(segment => ({ ...segment }));
+                lastLogicTime = Date.now();
+
+                const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+                
+                if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                    resetGame(); return;
+                }
+
+                for (let i = 0; i < snake.length; i++) {
+                    if (head.x === snake[i].x && head.y === snake[i].y) {
+                        resetGame(); return;
+                    }
+                }
+
+                snake.unshift(head);
+
+                if (head.x === food.x && head.y === food.y) {
+                    score += 10;
+                    scoreDisplay.innerText = score;
+                    placeFood();
+                } else {
+                    snake.pop(); 
+                }
+            }
+        }
+
+        function drawGame() {
+            requestAnimationFrame(drawGame);
+
+            let progress = (Date.now() - lastLogicTime) / gameSpeed;
+            if (progress > 1 || (dx === 0 && dy === 0)) progress = 1;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Grid
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 1;
+            for(let i=0; i<=canvas.width; i+=gridSize) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+            }
+
+            // Draw Food
+            ctx.fillStyle = '#f43f5e';
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = 'rgba(244, 63, 94, 0.6)';
+            ctx.beginPath();
+            ctx.arc(food.x * gridSize + gridSize/2, food.y * gridSize + gridSize/2, gridSize/2 - 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0; 
+
+            // Draw Smooth Snake
+            snake.forEach((segment, index) => {
+                let drawX = segment.x;
+                let drawY = segment.y;
+
+                if (oldSnake[index]) {
+                    drawX = oldSnake[index].x + (segment.x - oldSnake[index].x) * progress;
+                    drawY = oldSnake[index].y + (segment.y - oldSnake[index].y) * progress;
+                } else if (index > 0 && oldSnake[index - 1]) {
+                    drawX = oldSnake[index - 1].x;
+                    drawY = oldSnake[index - 1].y;
+                }
+
+                ctx.fillStyle = index === 0 ? '#bae6fd' : '#38bdf8';
+                ctx.shadowBlur = index === 0 ? 15 : 0;
+                ctx.shadowColor = 'rgba(56, 189, 248, 0.5)';
+                
+                ctx.beginPath();
+                ctx.roundRect(drawX * gridSize + 1, drawY * gridSize + 1, gridSize - 2, gridSize - 2, 6);
+                ctx.fill();
+            });
+            ctx.shadowBlur = 0; 
+
+            // Draw Pause Screen
+            if (dx === 0 && dy === 0) {
+                ctx.fillStyle = "rgba(2, 6, 23, 0.7)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#f8fafc";
+                ctx.font = "bold 24px -apple-system, sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("Game Paused", canvas.width / 2, canvas.height / 2 - 10);
+                ctx.fillStyle = "#94a3b8";
+                ctx.font = "14px -apple-system, sans-serif";
+                ctx.fillText("Show hand to resume", canvas.width / 2, canvas.height / 2 + 20);
+            }
+        }
+
+        setInterval(updateLogic, gameSpeed); 
+        requestAnimationFrame(drawGame);     
+
+        // --- POINTING GESTURE LOGIC ---
+        const videoElement = document.getElementById('videoElement');
+        const loadingText = document.getElementById('loading');
+
+        function onResults(results) {
+            loadingText.style.display = 'none';
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const hand = results.multiHandLandmarks[0];
+                const indexBase = hand[5];
+                const indexTip = hand[8];
+
+                const diffX = indexTip.x - indexBase.x;
+                const diffY = indexTip.y - indexBase.y;
+                const deadzone = 0.08; 
+
+                if (Math.abs(diffX) > deadzone || Math.abs(diffY) > deadzone) {
+                    if (Math.abs(diffX) > Math.abs(diffY)) {
+                        if (diffX < 0) {
+                            gestureReadout.innerText = "Tracking: RIGHT";
+                            if (lastDx !== -1) { nextDx = 1; nextDy = 0; } 
+                        } else {
+                            gestureReadout.innerText = "Tracking: LEFT";
+                            if (lastDx !== 1) { nextDx = -1; nextDy = 0; }
+                        }
+                    } else {
+                        if (diffY < 0) {
+                            gestureReadout.innerText = "Tracking: UP";
+                            if (lastDy !== 1) { nextDx = 0; nextDy = -1; }
+                        } else {
+                            gestureReadout.innerText = "Tracking: DOWN";
+                            if (lastDy !== -1) { nextDx = 0; nextDy = 1; }
+                        }
+                    }
+                } else {
+                    if (dx === 0 && dy === 0) {
+                        gestureReadout.innerText = "Point to unpause";
+                    } else {
+                        gestureReadout.innerText = "Cruising...";
+                    }
+                }
+            } else {
+                gestureReadout.innerText = "Camera Paused";
+                nextDx = 0; nextDy = 0; 
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        // Optimize for mobile by lowering complexity if needed, though 1 is usually fine
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1, 
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        // Standard camera util usually defaults to the user-facing camera on mobile
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 320, height: 240
+        });
+        camera.start();
+
+    </script>
+</body>
+</html>
